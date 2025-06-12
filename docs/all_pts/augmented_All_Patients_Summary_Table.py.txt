@@ -1,0 +1,25 @@
+#* augmented_All_Patients_Summary_Table:
+#*   desc: augments summary table with new combined variable
+#*   ext: py
+#*   inputs:
+#*   - Augmented_Fact_Day_Combine_variables
+#*   - All_patients_summary_fact_table_de_id
+#* 
+
+def augmented_All_Patients_Summary_Table(All_patients_summary_fact_table_de_id, Augmented_Fact_Day_Combine_variables):
+    Combine_variables = Augmented_Fact_Day_Combine_variables
+
+    df = Combine_variables.select("person_id", "same_day_occurrence_v1_v2", "either_v3_or_v4")
+    df = df.groupby('person_id').agg(
+        *[F.max(col).alias(col + '_indicator') for col in df.columns if col not in ('person_id')])
+    
+    df = df.na.fill(value=0)
+    df = df.join(All_patients_summary_fact_table_de_id, 'person_id', 'left')
+    
+    return df
+        
+#################################################
+## Global imports and functions included below ##
+#################################################
+
+from pyspark.sql import functions as F

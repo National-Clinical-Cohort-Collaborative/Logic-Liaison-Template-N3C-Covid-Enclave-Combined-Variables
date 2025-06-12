@@ -1,0 +1,57 @@
+#* augmented_COVID_Patient_Summary_Table:
+#*   desc: augments summary table with new combined variable
+#*   ext: py
+#*   inputs:
+#*   - Logic_Liaison_Covid_19_Patient_Summary_Facts_Table_De_identified_
+#*   - Augmented_COVID_Patient_Fact_Day_Combine_variables
+#* 
+
+def augmented_COVID_Patient_Summary_Table(Logic_Liaison_Covid_19_Patient_Summary_Facts_Table_De_identified_, Augmented_COVID_Patient_Fact_Day_Combine_variables):
+
+    #Add default Logic Liaison input dataset in Patient Summary Table: /UNITE/N3C Knowledge Store Shared Data Project - De-identified/[RP-5C7806] Logic Liaison Shared Logic/KO-BE5C652 - Fact Tables: COVID-19 Diagnosed or Lab Confirmed Patients (De-identified)/workbook-output/Example Visit Level and Patient Level Datasets (De-Identified)/[Logic Liaison] Cohort All Facts Table (De-identified)
+    
+    all_facts = Augmented_COVID_Patient_Fact_Day_Combine_variables.select('person_id', 'same_day_occurrence_v1_v2', 'either_v3_or_v4', 'pre_COVID', 'during_first_strong_COVID_hospitalization', 'during_first_weak_COVID_hospitalization', 'post_COVID')
+    summary_table = Logic_Liaison_Covid_19_Patient_Summary_Facts_Table_De_identified_
+
+    df_pre_COVID = all_facts \
+        .where(all_facts.pre_COVID==1) \
+        .select('person_id', 'same_day_occurrence_v1_v2', 'either_v3_or_v4')
+    df_during_strong_COVID_hospitalization = all_facts \
+        .where(all_facts.during_first_strong_COVID_hospitalization==1) \
+        .select('person_id', 'same_day_occurrence_v1_v2', 'either_v3_or_v4')
+    df_during_weak_COVID_hospitalization = all_facts \
+        .where(all_facts.during_first_weak_COVID_hospitalization==1) \
+        .select('person_id', 'same_day_occurrence_v1_v2', 'either_v3_or_v4')
+    df_post_COVID = all_facts \
+        .where(all_facts.post_COVID==1) \
+        .select('person_id', 'same_day_occurrence_v1_v2', 'either_v3_or_v4')
+   
+    df_pre_COVID = df_pre_COVID.groupby('person_id').agg(
+        *[F.max(col).alias(col + '_before_or_day_of_covid_indicator') for col in df_pre_COVID.columns if col not in ('person_id')])
+
+    df_during_strong_COVID_hospitalization = df_during_strong_COVID_hospitalization.groupby('person_id').agg(
+        *[F.max(col).alias(col + '_during_strong_covid_hospitalization_indicator') for col in df_during_strong_COVID_hospitalization.columns if col not in ('person_id')])
+
+    df_during_weak_COVID_hospitalization = df_during_weak_COVID_hospitalization.groupby('person_id').agg(
+        *[F.max(col).alias(col + '_during_weak_covid_hospitalization_indicator') for col in df_during_weak_COVID_hospitalization.columns if col not in ('person_id')])
+
+    df_post_COVID = df_post_COVID.groupby('person_id').agg(
+        *[F.max(col).alias(col + '_post_covid_indicator') for col in df_post_COVID.columns if col not in ('person_id')])
+
+    #join above four tables on patient ID 
+    df = df_pre_COVID.join(df_during_strong_COVID_hospitalization, 'person_id', 'outer')
+    df = df.join(df_during_weak_COVID_hospitalization, 'person_id', 'outer')
+    df = df.join(df_post_COVID, 'person_id', 'outer')
+
+    df = df.na.fill(value=0, subset = [col for col in df.columns])
+   
+    #join with original summary table
+    df = df.join(summary_table,'person_id', 'outer')
+     
+    return df
+        
+#################################################
+## Global imports and functions included below ##
+#################################################
+
+from pyspark.sql import functions as F
